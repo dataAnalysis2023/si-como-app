@@ -24,13 +24,20 @@ Prioridades y estado de tareas. Actualizar al cerrar cada sesión.
 
 _(vacío)_
 
-## 📋 Próximas — MVP presentable
+## 🎯 Convicción central
 
-- [ ] Inicializar repositorio git y primer commit
-- [ ] Deploy inicial en Vercel (obtener URL pública)
-- [ ] Probar envío real de WhatsApp en móvil con API key válido
-- [ ] Validar instalación PWA en iOS y Android (Add to Home Screen)
-- [ ] QA visual en móvil: notch, tamaños, scroll del bottom sheet
+**El valor real de ¡SÍ Como! está en el celular.** Todo pendiente debe evaluarse desde el lente móvil. Desktop es solo para desarrollo.
+
+## 📋 Próximas — MVP móvil presentable
+
+- [x] Inicializar repositorio git y primer commit
+- [x] Deploy inicial en Vercel (URL pública asignada)
+- [ ] **Probar la app real en el celular de Juan** (abrir URL de Vercel en el navegador del teléfono)
+- [ ] **Instalar como PWA** (Add to Home Screen en iOS y Android) y confirmar ícono + splash
+- [ ] **Probar envío real de WhatsApp** desde móvil con API key válido del cocinero
+- [ ] **QA táctil en móvil:** tamaños del plato, chips de proteína/bebida, bottom sheet con notch, scroll del modal con teclado abierto
+- [ ] Validar safe-area-inset en iOS (notch y home indicator)
+- [ ] Confirmar que el auto-reset del estado visual funciona cuando el celular se bloquea y se reabre cruzando un rango
 
 ## 📋 Mejoras detectadas — polish
 

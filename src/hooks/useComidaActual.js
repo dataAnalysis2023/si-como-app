@@ -1,6 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { storage } from '../utils/storage.js';
 
+/**
+ * Devuelve los slots navegables en un horizonte de hoy + mañana.
+ * Cada slot: { comida, fecha, slotKey, esHoy }.
+ * Orden: todas las de hoy (en el orden del array) seguidas de todas las de mañana.
+ */
+export function listarSlotsDosDias(comidas, ahora = new Date()) {
+  if (!Array.isArray(comidas) || comidas.length === 0) return [];
+  const hoy = fechaISO(ahora);
+  const manana = fechaISO(addDias(ahora, 1));
+  return [
+    ...comidas.map((c) => ({ comida: c, fecha: hoy, slotKey: `${hoy}-${c.id}`, esHoy: true })),
+    ...comidas.map((c) => ({ comida: c, fecha: manana, slotKey: `${manana}-${c.id}`, esHoy: false })),
+  ];
+}
+
 function toMin(hhmm) {
   const [h, m] = (hhmm || '00:00').split(':').map(Number);
   return h * 60 + m;
@@ -19,19 +34,7 @@ function addDias(d, n) {
   return x;
 }
 
-/**
- * Devuelve:
- *  { comida, activa, fecha, slotKey }
- *  comida = { id, nombre, inicio, fin } o null si no hay comidas configuradas
- *  activa = true si la hora cae dentro del rango
- *  fecha  = YYYY-MM-DD al que pertenece el "turno"
- *  slotKey = identificador único del turno (para auto-reset)
- */
-export function calcularComidaActual(comidas, ahora = new Date()) {
-  if (!Array.isArray(comidas) || comidas.length === 0) {
-    return { comida: null, activa: false, fecha: null, slotKey: null };
-  }
-
+function calcularNatural(comidas, ahora) {
   const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
   const hoy = fechaISO(ahora);
 
@@ -43,7 +46,6 @@ export function calcularComidaActual(comidas, ahora = new Date()) {
         return { comida: c, activa: true, fecha: hoy, slotKey: `${hoy}-${c.id}` };
       }
     } else {
-      // cruza medianoche: inicio tarde, fin temprano al día siguiente
       if (minAhora >= ini) {
         return { comida: c, activa: true, fecha: hoy, slotKey: `${hoy}-${c.id}` };
       }
@@ -54,7 +56,6 @@ export function calcularComidaActual(comidas, ahora = new Date()) {
     }
   }
 
-  // No hay comida activa → calcular próxima
   let mejor = null;
   let mejorDelta = Infinity;
   let mejorFecha = null;
@@ -80,15 +81,65 @@ export function calcularComidaActual(comidas, ahora = new Date()) {
   };
 }
 
+// La forzada expira cuando ya pasó el fin de su rango en su fecha, o si su slot
+// coincide con el natural (llegó al turno naturalmente), o si el natural ya
+// avanzó más allá (usuario ignoró la app y el reloj lo rebasó).
+function forzadaVigente(forzada, natural, ahora) {
+  if (!forzada || !natural?.slotKey) return false;
+  if (forzada.slotKey === natural.slotKey) return false;
+  const hoy = fechaISO(ahora);
+  if (forzada.fecha < hoy) return false;
+  if (forzada.fecha > hoy) return true;
+  const minAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  const finForzada = toMin(forzada.fin);
+  const iniForzada = toMin(forzada.inicio);
+  if (iniForzada <= finForzada && minAhora > finForzada) return false;
+  // Si la natural pertenece a hoy y arranca después que la forzada, el reloj la rebasó
+  if (natural.fecha === hoy && toMin(natural.comida.inicio) > iniForzada) return false;
+  return true;
+}
+
+export function calcularComidaActual(comidas, ahora = new Date(), forzada = null) {
+  if (!Array.isArray(comidas) || comidas.length === 0) {
+    return { comida: null, activa: false, fecha: null, slotKey: null, forzada: false };
+  }
+  const natural = calcularNatural(comidas, ahora);
+  if (forzada && forzadaVigente(forzada, natural, ahora)) {
+    const c = comidas.find((x) => x.id === forzada.id);
+    if (c) {
+      return {
+        comida: c,
+        activa: false,
+        fecha: forzada.fecha,
+        slotKey: forzada.slotKey,
+        forzada: true,
+      };
+    }
+  }
+  return { ...natural, forzada: false };
+}
+
 export function useComidaActual(comidas) {
-  const [estado, setEstado] = useState(() => calcularComidaActual(comidas));
+  const [estado, setEstado] = useState(() =>
+    calcularComidaActual(comidas, new Date(), storage.getForzada())
+  );
+  const [comidasRef, setComidasRef] = useState(comidas);
+
+  // Recalcular al cambiar el array de comidas — patrón setState durante render.
+  if (comidas !== comidasRef) {
+    setComidasRef(comidas);
+    const nuevo = calcularComidaActual(comidas, new Date(), storage.getForzada());
+    if (!nuevo.forzada && storage.getForzada()) storage.clearForzada();
+    setEstado(nuevo);
+  }
 
   const recalcular = useCallback(() => {
-    setEstado(calcularComidaActual(comidas));
+    const nuevo = calcularComidaActual(comidas, new Date(), storage.getForzada());
+    if (!nuevo.forzada && storage.getForzada()) storage.clearForzada();
+    setEstado(nuevo);
   }, [comidas]);
 
   useEffect(() => {
-    recalcular();
     const intervalo = setInterval(recalcular, 30_000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') recalcular();
@@ -102,14 +153,15 @@ export function useComidaActual(comidas) {
     };
   }, [recalcular]);
 
-  // Auto-reset del estadoActual cuando cambia el slotKey
-  useEffect(() => {
-    if (!estado.slotKey) return;
-    const guardado = storage.getEstado();
-    if (guardado && guardado.slotKey !== estado.slotKey) {
-      storage.clearEstado();
+  // Auto-reset del estadoActual cuando cambia el slot — efecto "sincronizar con storage".
+  const [slotKeyRef, setSlotKeyRef] = useState(estado.slotKey);
+  if (estado.slotKey !== slotKeyRef) {
+    setSlotKeyRef(estado.slotKey);
+    if (estado.slotKey) {
+      const guardado = storage.getEstado();
+      if (guardado && guardado.slotKey !== estado.slotKey) storage.clearEstado();
     }
-  }, [estado.slotKey]);
+  }
 
-  return estado;
+  return { ...estado, recalcular };
 }
