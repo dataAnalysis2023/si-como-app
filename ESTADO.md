@@ -4,6 +4,52 @@ Registro cronológico de sesiones y decisiones. Entradas más recientes arriba.
 
 ---
 
+## 2026-04-15 — Sesión larga: proteínas/bebidas + navegación + suite de tests + robustez de envío
+
+### Completado
+- **Convicción móvil registrada** como memoria permanente: el valor real de ¡SÍ Como! vive en el celular. Todo pendiente se evalúa desde ese lente.
+- **Botón Skip** en el header: confirmación → envía "no voy" → fuerza la UI al siguiente turno (avance virtual). Auto-limpieza cuando el reloj llega al slot forzado o lo rebasa.
+- **Modal reducido a 2 rutas:** "Voy a estar" / "No voy a estar". Ruta "pedido" eliminada.
+- **Reemplazo del menú recurrente libre** por dos dimensiones con multi-selección: **proteínas** (huevos, pollo, carne de res, pescado, cerdo) y **bebidas** (té, jugo de fruta, jugo de flor de Jamaica). Sin filtro por tipo de comida (decisión: máxima simplicidad). Campo "Nota" libre opcional.
+- **Agregar proteína/bebida inline** desde el modal: Enter o botón, dedupe case-insensitive, auto-selección del recién agregado.
+- **Mensajes WhatsApp cálidos**: tono pensado para pareja que comparte comida, multi-items con concordancia ("Se me antoja pollo" vs "Se me antojan pollo y huevos"), listas en español bien formadas, emojis ocasionales. Formatos: `"Juan: ¡sí! voy a almorzar. Se me antoja pollo y de tomar té 🍽"`, `"Juan: hoy no cuento para la cena 😔"`.
+- **Navegación por flechas hoy/mañana**: `← →` en el header permiten navegar los 6 slots del horizonte (3 comidas × 2 días). Labels contextuales: "Ahora / Próximo / Hoy / Mañana / Siguiente". Extremos deshabilitan las flechas. Decidir sobre mañana produce mensaje con prefijo "mañana".
+- **Historial silencioso** por slotKey (`sicomo.historial`, tope 2000 entradas). Guarda selecciones, no consumo — base para futura vista de hábitos.
+- **Pre-carga de selección** previa al "Cambiar aviso": el modal vuelve a abrirse con proteínas/bebidas/nota marcadas.
+- **Confirmación al eliminar comida** en Configuración (dialog modal).
+- **Empty states en modal con CTA** a Configuración (link directo a agregar).
+- **Previsualización del siguiente turno** en el dialog de Skip (`pasarás a Almuerzo`).
+- **Robustez de envío WhatsApp**:
+  - Timeout 8s con `AbortController`.
+  - Check `navigator.onLine` antes del intento.
+  - Mensaje de error específico por caso (offline, timeout, red).
+  - Banner persistente de error con botones **Reintentar** y **Abrir WhatsApp manual** (fallback `wa.me` con mensaje precargado).
+- **Limitación documentada honestamente**: con `fetch mode: 'no-cors'` no es posible confirmar entrega real. Solo detectamos fallos duros. Confirmación real requiere backend propio (post-MVP).
+- **Suite de tests instalada**: Vitest + @testing-library/react + jsdom. **115 tests pasando** (44 unitarios + 41 DOM + 30 integración). Cobertura: migración v1→v2 de comidas, normalización de proteínas/bebidas, historial FIFO, forzada con auto-limpieza, cruce de medianoche, mensajes con todas las permutaciones, multi-select, agregar inline, confirmación de eliminación, navegación con flechas, envío con timeout/red/offline, fallback `wa.me`, reintento, preview siguiente turno.
+- **Deploy automático Vercel** disparado por push a main. URL del deploy en `vercel ls`.
+
+### Decisiones tomadas
+- **Rechazo de la memoria en el mensaje de WhatsApp**: incluir historial en el mensaje rompe el tono cercano y suena a bot. La memoria vive en la app para decisiones del usuario, no en el mensaje al cocinero. Confirmado por Juan.
+- **Historial guarda selecciones, no consumo**: una selección ≠ lo que efectivamente comió. Guardamos solo la intención registrada. La vista de hábitos requerirá un paso de confirmación posterior (post-MVP) antes de emitir análisis, para no brindar información falsa.
+- **Proteínas y bebidas sin filtro por tipo de comida**: todas disponibles siempre (2.C). Se privilegia simplicidad sobre la duda de "¿carne de res al desayuno?". El usuario decide en el momento.
+- **Multi-selección en ambas dimensiones** (proteína y bebida pueden tener varios items).
+- **Selección opcional al decir "sí voy"**: puedes confirmar sin elegir nada.
+- **Navegación manual no persiste** entre recargas. Solo la forzada del skip persiste. Si abres la app, vuelves al estado natural (+ forzada pendiente).
+- **Navegación se reinicia al cambiar el slot natural**: si navegaste a almuerzo y pasan 2 horas naturales, al cambiar el reloj de desayuno a almuerzo se resetea la vista al natural.
+- **React 19 setState-in-effect**: todos los efectos que reseteaban estado al cambiar prop/slot reescritos al patrón oficial de `setState durante render` para evitar el lint `react-hooks/set-state-in-effect`.
+- **Framework de testing**: Vitest elegido por integración nativa con Vite (mismo config + HMR + ESM sin transpilación extra).
+
+### Bug real encontrado y fix estructural
+- **`mensajes.antojo()` usaba `proteinas.length` antes de filtrar vacíos** → concordancia singular/plural incorrecta cuando llegaban arrays con items vacíos. Fix: función `limpiar()` compartida que filtra espacios y vacíos antes de contar. Test de regresión agregado.
+
+### Pendientes identificados
+- **Móvil real**: abrir la URL de Vercel en el celular, confirmar instalación PWA, probar envío con API key real del cocinero. Es el criterio real de "MVP presentable".
+- Refinamientos menores de la navegación: feedback visual en extremos, indicador de "ya decidiste" en mini-header al navegar a comidas con aviso previo.
+- Escalabilidad post-MVP: vista de hábitos + paso de confirmación de consumo + sugerencia de compra mensual (arquitectura de datos ya preparada con `sicomo.historial`).
+- Backend propio para confirmación real de entrega de WhatsApp (Vercel Function + Twilio/Cloud API).
+
+---
+
 ## 2026-04-14 (tarde) — Renombre del producto
 
 - Producto renombrado de **Rancho** a **¡SÍ Como!**
